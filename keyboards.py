@@ -126,6 +126,7 @@ def admin_menu() -> ReplyKeyboardMarkup:
     m = ReplyKeyboardMarkup(resize_keyboard=True)
     m.row(KeyboardButton("📊 İstatistikler"), KeyboardButton("📦 Bekleyen Siparişler"))
     m.row(KeyboardButton("➕ Kategori Ekle"), KeyboardButton("➕ Ürün Ekle"))
+    m.row(KeyboardButton("🗑 Ürün Yönet"), KeyboardButton("🗑 Kategori Yönet"))
     m.row(KeyboardButton("🎟️ Kupon Oluştur"), KeyboardButton("🎁 Çekiliş Başlat"))
     m.row(KeyboardButton("📢 Kanal Öner"), KeyboardButton("🆘 Destek Talepleri"))
     m.row(KeyboardButton("🚫 Kullanıcı Engelle"), KeyboardButton("✅ Engel Kaldır"))
@@ -137,6 +138,7 @@ def founder_menu() -> ReplyKeyboardMarkup:
     m = ReplyKeyboardMarkup(resize_keyboard=True)
     m.row(KeyboardButton("📊 İstatistikler"), KeyboardButton("📦 Bekleyen Siparişler"))
     m.row(KeyboardButton("➕ Kategori Ekle"), KeyboardButton("➕ Ürün Ekle"))
+    m.row(KeyboardButton("🗑 Ürün Yönet"), KeyboardButton("🗑 Kategori Yönet"))
     m.row(KeyboardButton("🎟️ Kupon Oluştur"), KeyboardButton("🎁 Çekiliş Başlat"))
     m.row(KeyboardButton("📢 Kanal Yönet"), KeyboardButton("🆘 Destek Talepleri"))
     m.row(KeyboardButton("👥 Admin Yönet"), KeyboardButton("⏳ Onay Bekleyenler"))
@@ -159,4 +161,65 @@ def channel_list_inline(channels: list) -> InlineKeyboardMarkup:
     for ch in channels:
         m.add(InlineKeyboardButton(f"🗑 {ch} Sil", callback_data=f"del_channel_{ch.lstrip('@')}"))
     m.add(InlineKeyboardButton("➕ Yeni Kanal Ekle", callback_data="add_new_channel"))
+    return m
+
+
+def manage_products_inline(products: list) -> InlineKeyboardMarkup:
+    m = InlineKeyboardMarkup()
+    if not products:
+        m.add(InlineKeyboardButton("— Ürün yok —", callback_data="noop"))
+        return m
+    for p in products:
+        stock_txt = "∞" if p["stock"] == -1 else str(p["stock"])
+        status = "✅" if p["is_active"] else "❌"
+        m.add(InlineKeyboardButton(
+            f"{status} {p['name']}  |  {p['price']}💎  |  Stok:{stock_txt}",
+            callback_data=f"manage_prod_{p['id']}"
+        ))
+    return m
+
+
+def product_manage_detail_inline(product_id: int, is_active: bool) -> InlineKeyboardMarkup:
+    m = InlineKeyboardMarkup()
+    toggle_label = "🔴 Pasif Yap" if is_active else "🟢 Aktif Yap"
+    m.row(
+        InlineKeyboardButton(toggle_label, callback_data=f"toggle_prod_{product_id}"),
+        InlineKeyboardButton("🗑 Sil", callback_data=f"confirm_del_prod_{product_id}")
+    )
+    m.add(InlineKeyboardButton("✏️ Stok Güncelle", callback_data=f"edit_stock_{product_id}"))
+    m.add(InlineKeyboardButton("◀️ Geri", callback_data="back_manage_products"))
+    return m
+
+
+def confirm_delete_inline(confirm_cb: str, cancel_cb: str) -> InlineKeyboardMarkup:
+    m = InlineKeyboardMarkup()
+    m.row(
+        InlineKeyboardButton("✅ Evet, Sil", callback_data=confirm_cb),
+        InlineKeyboardButton("❌ Vazgeç", callback_data=cancel_cb)
+    )
+    return m
+
+
+def manage_categories_inline(categories: list) -> InlineKeyboardMarkup:
+    m = InlineKeyboardMarkup()
+    if not categories:
+        m.add(InlineKeyboardButton("— Kategori yok —", callback_data="noop"))
+        return m
+    for c in categories:
+        status = "✅" if c["is_active"] else "❌"
+        m.add(InlineKeyboardButton(
+            f"{status} {c['emoji']} {c['name']}",
+            callback_data=f"manage_cat_{c['id']}"
+        ))
+    return m
+
+
+def category_manage_detail_inline(cat_id: int, is_active: bool) -> InlineKeyboardMarkup:
+    m = InlineKeyboardMarkup()
+    toggle_label = "🔴 Pasif Yap" if is_active else "🟢 Aktif Yap"
+    m.row(
+        InlineKeyboardButton(toggle_label, callback_data=f"toggle_cat_{cat_id}"),
+        InlineKeyboardButton("🗑 Sil", callback_data=f"confirm_del_cat_{cat_id}")
+    )
+    m.add(InlineKeyboardButton("◀️ Geri", callback_data="back_manage_categories"))
     return m
