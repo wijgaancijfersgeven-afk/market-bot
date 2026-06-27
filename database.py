@@ -512,6 +512,71 @@ def add_category(name, emoji, is_vip_only=False):
     conn.close()
 
 
+def get_all_products():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM products ORDER BY category_id, sort_order")
+    products = _rows(c)
+    conn.close()
+    return products
+
+
+def delete_product(product_id):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("DELETE FROM products WHERE id = ?", (product_id,))
+    conn.commit()
+    conn.close()
+
+
+def toggle_product_active(product_id):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE products SET is_active = NOT is_active WHERE id = ?", (product_id,))
+    conn.commit()
+    c.execute("SELECT is_active FROM products WHERE id = ?", (product_id,))
+    row = c.fetchone()
+    conn.close()
+    return bool(row[0]) if row else False
+
+
+def update_product_stock(product_id, stock):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE products SET stock = ? WHERE id = ?", (stock, product_id))
+    conn.commit()
+    conn.close()
+
+
+def get_all_categories():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM categories ORDER BY sort_order")
+    cats = _rows(c)
+    conn.close()
+    return cats
+
+
+def delete_category(category_id):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("DELETE FROM products WHERE category_id = ?", (category_id,))
+    c.execute("DELETE FROM categories WHERE id = ?", (category_id,))
+    conn.commit()
+    conn.close()
+
+
+def toggle_category_active(category_id):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE categories SET is_active = NOT is_active WHERE id = ?", (category_id,))
+    conn.commit()
+    c.execute("SELECT is_active FROM categories WHERE id = ?", (category_id,))
+    row = c.fetchone()
+    conn.close()
+    return bool(row[0]) if row else False
+
+
 def add_product(name, category_id, price, stock, description, content, is_vip_only):
     conn = get_conn()
     c = conn.cursor()
