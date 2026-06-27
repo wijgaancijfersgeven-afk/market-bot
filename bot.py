@@ -4,6 +4,10 @@ from dotenv import load_dotenv
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 import database as db
 import keyboards as kb
+from keyboards import (
+    manage_products_inline, product_manage_detail_inline,
+    confirm_delete_inline, manage_categories_inline, category_manage_detail_inline
+)
 from handlers.admin import register_admin_handlers
 
 load_dotenv()
@@ -134,7 +138,8 @@ def text_handler(message):
         state == "admin" or
         text in [
             "📊 İstatistikler", "📦 Bekleyen Siparişler", "➕ Kategori Ekle",
-            "➕ Ürün Ekle", "🎟️ Kupon Oluştur", "🎁 Çekiliş Başlat",
+            "➕ Ürün Ekle", "🗑 Ürün Yönet", "🗑 Kategori Yönet",
+            "🎟️ Kupon Oluştur", "🎁 Çekiliş Başlat",
             "📢 Kanal Yönet", "📢 Kanal Öner", "🆘 Destek Talepleri",
             "👥 Admin Yönet", "⏳ Onay Bekleyenler",
             "🚫 Kullanıcı Engelle", "✅ Engel Kaldır",
@@ -533,6 +538,169 @@ def callback_handler(call):
             "➕ Eklemek istediğiniz kanalı girin (örn: @kanaladi):",
             parse_mode="Markdown",
             reply_markup=__import__("keyboards").cancel_menu())
+        return
+
+    # ── Ürün & Kategori Yönetimi (Admin) ─────────────────
+
+    if data.startswith("manage_prod_") and is_admin(uid):
+        pid = int(data.replace("manage_prod_", ""))
+        p = db.get_product(pid)
+        if not p:
+            bot.answer_callback_query(call.id, "Ürün bulunamadı!")
+            return
+        stock_txt = "∞ Sınırsız" if p["stock"] == -1 else f"{p['stock']} adet"
+        status_txt = "✅ Aktif" if p["is_active"] else "❌ Pasif"
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(
+            f"📦 *{p['name']}*\n\n"
+            f"├ 💰 Fiyat: *{p['price']} Puan*\n"
+            f"├ 📊 Stok: *{stock_txt}*\n"
+            f"├ 🔖 Durum: *{status_txt}*\n"
+            f"└ 🛒 Satış: *{p['sold_count']} adet*",
+            call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown",
+            reply_markup=product_manage_detail_inline(p["id"], bool(p["is_active"])))
+        return
+
+    if data.startswith("toggle_prod_") and is_admin(uid):
+        pid = int(data.replace("toggle_prod_", ""))
+        new_state = db.toggle_product_active(pid)
+        bot.answer_callback_query(call.id, "✅ Aktif yapıldı!" if new_state else "🔴 Pasif yapıldı!")
+        p = db.get_product(pid)
+        if p:
+            stock_txt = "∞ Sınırsız" if p["stock"] == -1 else f"{p['stock']} adet"
+            status_txt = "✅ Aktif" if p["is_active"] else "❌ Pasif"
+            bot.edit_message_text(
+                f"📦 *{p['name']}*\n\n"
+                f"├ 💰 Fiyat: *{p['price']} Puan*\n"
+                f"├ 📊 Stok: *{stock_txt}*\n"
+                f"├ 🔖 Durum: *{status_txt}*\n"
+                f"└ 🛒 Satış: *{p['sold_count']} adet*",
+                call.message.chat.id, call.message.message_id,
+                parse_mode="Markdown",
+                reply_markup=product_manage_detail_inline(p["id"], bool(p["is_active"])))
+        return
+
+    if data.startswith("confirm_del_prod_") and is_admin(uid):
+        pid = int(data.replace("confirm_del_prod_", ""))
+        p = db.get_product(pid)
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(
+            f"⚠️ *{p['name']}* ürününü silmek istediğine emin misin?\n\nBu işlem geri alınamaz!",
+            call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown",
+            reply_markup=confirm_delete_inline(f"del_prod_{pid}", "back_manage_products"))
+        return
+
+    if data.startswith("del_prod_") and is_admin(uid):
+        pid = int(data.replace("del_prod_", ""))
+        db.delete_product(pid)
+        bot.answer_callback_query(call.id, "🗑 Ürün silindi!")
+        products = db.get_all_products()
+        bot.edit_message_text(
+            f"🗑 *Ürün Yönetimi* ({len(products)} ürün)\n\nDüzenlemek istediğin ürüne tıkla:",
+            call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown",
+            reply_markup=manage_products_inline(products))
+        return
+
+    if data == "back_manage_products" and is_admin(uid):
+        bot.answer_callback_query(call.id)
+        products = db.get_all_products()
+        bot.edit_message_text(
+            f"🗑 *Ürün Yönetimi* ({len(products)} ürün)\n\nDüzenlemek istediğin ürüne tıkla:",
+            call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown",
+            reply_markup=manage_products_inline(products))
+        return
+
+    if data.startswith("edit_stock_") and is_admin(uid):
+        pid = int(data.replace("edit_stock_", ""))
+        sessions[uid] = {"state": f"set_stock_{pid}"}
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id,
+            "📊 Yeni stok miktarını girin (-1 = sınırsız):",
+            reply_markup=kb.cancel_menu())
+        return
+
+    if data.startswith("manage_cat_") and is_admin(uid):
+        cid = int(data.replace("manage_cat_", ""))
+        conn = db.get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM categories WHERE id = ?", (cid,))
+        cat = dict(c.fetchone()) if c.fetchone() else None
+        # re-fetch properly
+        conn.close()
+        cats = db.get_all_categories()
+        cat = next((c for c in cats if c["id"] == cid), None)
+        if not cat:
+            bot.answer_callback_query(call.id, "Kategori bulunamadı!")
+            return
+        prods = db.get_products(cid, is_vip=True)
+        status_txt = "✅ Aktif" if cat["is_active"] else "❌ Pasif"
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(
+            f"{cat['emoji']} *{cat['name']}*\n\n"
+            f"├ 🔖 Durum: *{status_txt}*\n"
+            f"├ 👑 VIP Only: *{'Evet' if cat['is_vip_only'] else 'Hayır'}*\n"
+            f"└ 📦 Ürün Sayısı: *{len(prods)} adet*",
+            call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown",
+            reply_markup=category_manage_detail_inline(cat["id"], bool(cat["is_active"])))
+        return
+
+    if data.startswith("toggle_cat_") and is_admin(uid):
+        cid = int(data.replace("toggle_cat_", ""))
+        new_state = db.toggle_category_active(cid)
+        bot.answer_callback_query(call.id, "✅ Aktif yapıldı!" if new_state else "🔴 Pasif yapıldı!")
+        cats = db.get_all_categories()
+        cat = next((c for c in cats if c["id"] == cid), None)
+        if cat:
+            prods = db.get_products(cid, is_vip=True)
+            status_txt = "✅ Aktif" if cat["is_active"] else "❌ Pasif"
+            bot.edit_message_text(
+                f"{cat['emoji']} *{cat['name']}*\n\n"
+                f"├ 🔖 Durum: *{status_txt}*\n"
+                f"├ 👑 VIP Only: *{'Evet' if cat['is_vip_only'] else 'Hayır'}*\n"
+                f"└ 📦 Ürün Sayısı: *{len(prods)} adet*",
+                call.message.chat.id, call.message.message_id,
+                parse_mode="Markdown",
+                reply_markup=category_manage_detail_inline(cat["id"], bool(cat["is_active"])))
+        return
+
+    if data.startswith("confirm_del_cat_") and is_admin(uid):
+        cid = int(data.replace("confirm_del_cat_", ""))
+        cats = db.get_all_categories()
+        cat = next((c for c in cats if c["id"] == cid), None)
+        bot.answer_callback_query(call.id)
+        name = f"{cat['emoji']} {cat['name']}" if cat else f"#{cid}"
+        bot.edit_message_text(
+            f"⚠️ *{name}* kategorisini silmek istediğine emin misin?\n\n🚨 İçindeki tüm ürünler de silinir!",
+            call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown",
+            reply_markup=confirm_delete_inline(f"del_cat_{cid}", "back_manage_categories"))
+        return
+
+    if data.startswith("del_cat_") and is_admin(uid):
+        cid = int(data.replace("del_cat_", ""))
+        db.delete_category(cid)
+        bot.answer_callback_query(call.id, "🗑 Kategori silindi!")
+        cats = db.get_all_categories()
+        bot.edit_message_text(
+            f"🗑 *Kategori Yönetimi* ({len(cats)} kategori)\n\nDüzenlemek istediğin kategoriye tıkla:",
+            call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown",
+            reply_markup=manage_categories_inline(cats))
+        return
+
+    if data == "back_manage_categories" and is_admin(uid):
+        bot.answer_callback_query(call.id)
+        cats = db.get_all_categories()
+        bot.edit_message_text(
+            f"🗑 *Kategori Yönetimi* ({len(cats)} kategori)\n\nDüzenlemek istediğin kategoriye tıkla:",
+            call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown",
+            reply_markup=manage_categories_inline(cats))
         return
 
     # ── Ürün & satın alma ─────────────────────────────────
