@@ -4,6 +4,7 @@ import string
 from datetime import datetime, timedelta
 
 DB_PATH = "bot.db"
+FOUNDER_ID = 8254024103
 
 
 def get_conn():
@@ -21,6 +22,21 @@ def init_db():
     CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        telegram_id INTEGER UNIQUE NOT NULL,
+        added_by INTEGER NOT NULL,
+        added_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS pending_actions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action_type TEXT NOT NULL,
+        requested_by INTEGER NOT NULL,
+        target_id INTEGER,
+        extra_data TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,6 +145,118 @@ def init_db():
     print("✅ Veritabanı hazır.")
 
 
+# ─── Yetki Sistemi ────────────────────────────────────────
+
+def is_founder(telegram_id):
+    return int(telegram_id) == FOUNDER_ID
+
+
+def is_admin(telegram_id):
+    if is_founder(telegram_id):
+        return True
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT id FROM admins WHERE telegram_id=?", (int(telegram_id),))
+    row = c.fetchone()
+    conn.close()
+    return row is not None
+
+
+def get_admins():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT telegram_id, added_by, added_at FROM admins ORDER BY added_at")
+    admins = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return admins
+
+
+def add_admin(telegram_id, added_by):
+    conn = get_conn()
+    try:
+        conn.execute("INSERT INTO admins (telegram_id, added_by) VALUES (?,?)", (int(telegram_id), int(added_by)))
+        conn.commit()
+        result = True
+    except sqlite3.IntegrityError:
+        result = False
+    conn.close()
+    return result
+
+
+def remove_admin(telegram_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM admins WHERE telegram_id=?", (int(telegram_id),))
+    conn.commit()
+    conn.close()
+
+
+# ─── Onay Bekleyen İşlemler ──────────────────────────────
+
+def create_pending_action(action_type, requested_by, target_id=None, extra_data=None):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO pending_actions (action_type, requested_by, target_id, extra_data) VALUES (?,?,?,?)",
+        (action_type, int(requested_by), target_id, extra_data)
+    )
+    action_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return action_id
+
+
+def get_pending_action(action_id):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM pending_actions WHERE id=?", (action_id,))
+    r = c.fetchone()
+    conn.close()
+    return dict(r) if r else None
+
+
+def resolve_pending_action(action_id, status):
+    conn = get_conn()
+    conn.execute("UPDATE pending_actions SET status=? WHERE id=?", (status, action_id))
+    conn.commit()
+    conn.close()
+
+
+def get_pending_actions_list():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM pending_actions WHERE status='pending' ORDER BY created_at DESC")
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+# ─── Kanallar ─────────────────────────────────────────────
+
+def get_all_channels():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT value FROM settings WHERE key LIKE 'channel_%'")
+    rows = [r["value"] for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def add_channel(channel):
+    key = f"channel_{channel.lstrip('@').lower()}"
+    conn = get_conn()
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, channel))
+    conn.commit()
+    conn.close()
+
+
+def remove_channel(channel):
+    key = f"channel_{channel.lstrip('@').lower()}"
+    conn = get_conn()
+    conn.execute("DELETE FROM settings WHERE key=?", (key,))
+    conn.commit()
+    conn.close()
+
+
 # ─── Ayarlar ──────────────────────────────────────────────
 
 def get_setting(key, default=None):
@@ -167,7 +295,7 @@ def get_or_create_user(telegram_id, first_name, username=None, last_name=None, r
     user = c.fetchone()
     if user:
         conn.close()
-        return dict(user), False  # (user, is_new)
+        return dict(user), False
 
     code = _gen_code()
     while True:
