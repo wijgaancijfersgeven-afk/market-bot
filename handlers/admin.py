@@ -2,7 +2,8 @@ import telebot
 import database as db
 from keyboards import (
     admin_menu, founder_menu, cancel_menu, yes_no_menu,
-    pending_action_inline, channel_list_inline
+    pending_action_inline, channel_list_inline,
+    manage_products_inline, manage_categories_inline
 )
 
 FOUNDER_ID = db.FOUNDER_ID
@@ -209,6 +210,24 @@ def register_admin_handlers(bot: telebot.TeleBot, sessions: dict):
                 return True
             sessions[uid] = {"state": "add_prod_name", "data": {}}
             bot.send_message(message.chat.id, "📦 *Yeni Ürün*\n\nÜrün adını girin:", parse_mode="Markdown", reply_markup=cancel_menu())
+            return True
+
+        if text == "🗑 Ürün Yönet":
+            products = db.get_all_products()
+            bot.send_message(message.chat.id,
+                f"🗑 *Ürün Yönetimi* ({len(products)} ürün)\n\n"
+                f"Düzenlemek istediğin ürüne tıkla:",
+                parse_mode="Markdown",
+                reply_markup=manage_products_inline(products))
+            return True
+
+        if text == "🗑 Kategori Yönet":
+            cats = db.get_all_categories()
+            bot.send_message(message.chat.id,
+                f"🗑 *Kategori Yönetimi* ({len(cats)} kategori)\n\n"
+                f"Düzenlemek istediğin kategoriye tıkla:",
+                parse_mode="Markdown",
+                reply_markup=manage_categories_inline(cats))
             return True
 
         if text == "🎟️ Kupon Oluştur":
@@ -576,6 +595,22 @@ def register_admin_handlers(bot: telebot.TeleBot, sessions: dict):
             sessions[uid] = {"state": "admin"}
             bot.send_message(message.chat.id,
                 f"🎉 Çekiliş *{d['title']}* başlatıldı! ({hours} saat)",
+                parse_mode="Markdown", reply_markup=_panel_menu(uid))
+            return True
+
+        if state.startswith("set_stock_"):
+            pid = int(state.replace("set_stock_", ""))
+            try:
+                stock = int(text.strip())
+            except ValueError:
+                bot.send_message(message.chat.id, "❌ Geçerli bir sayı girin (-1 = sınırsız):")
+                return True
+            db.update_product_stock(pid, stock)
+            p = db.get_product(pid)
+            sessions[uid] = {"state": "admin"}
+            stock_txt = "∞ Sınırsız" if stock == -1 else f"{stock} adet"
+            bot.send_message(message.chat.id,
+                f"✅ *{p['name']}* stoğu güncellendi: *{stock_txt}*",
                 parse_mode="Markdown", reply_markup=_panel_menu(uid))
             return True
 
