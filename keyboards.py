@@ -111,19 +111,11 @@ def confirm_transfer_inline(amount: int, to_user_id: int) -> InlineKeyboardMarku
     return m
 
 
-def lang_inline() -> InlineKeyboardMarkup:
+def join_channel_inline(channels: list) -> InlineKeyboardMarkup:
     m = InlineKeyboardMarkup()
-    m.row(
-        InlineKeyboardButton("🇹🇷 Türkçe", callback_data="lang_tr"),
-        InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")
-    )
-    return m
-
-
-def join_channel_inline(channel: str) -> InlineKeyboardMarkup:
-    m = InlineKeyboardMarkup()
-    link = channel if channel.startswith("http") else f"https://t.me/{channel.lstrip('@')}"
-    m.add(InlineKeyboardButton("📢 Kanala Katıl", url=link))
+    for ch in channels:
+        link = ch if ch.startswith("http") else f"https://t.me/{ch.lstrip('@')}"
+        m.add(InlineKeyboardButton(f"📢 {ch} Kanalına Katıl", url=link))
     m.add(InlineKeyboardButton("✅ Katıldım, Devam Et", callback_data="check_membership"))
     return m
 
@@ -135,6 +127,36 @@ def admin_menu() -> ReplyKeyboardMarkup:
     m.row(KeyboardButton("📊 İstatistikler"), KeyboardButton("📦 Bekleyen Siparişler"))
     m.row(KeyboardButton("➕ Kategori Ekle"), KeyboardButton("➕ Ürün Ekle"))
     m.row(KeyboardButton("🎟️ Kupon Oluştur"), KeyboardButton("🎁 Çekiliş Başlat"))
-    m.row(KeyboardButton("📢 Kanal Ayarla"), KeyboardButton("🆘 Destek Talepleri"))
+    m.row(KeyboardButton("📢 Kanal Öner"), KeyboardButton("🆘 Destek Talepleri"))
+    m.row(KeyboardButton("🚫 Kullanıcı Engelle"), KeyboardButton("✅ Engel Kaldır"))
     m.row(KeyboardButton("🏠 Ana Menü"))
+    return m
+
+
+def founder_menu() -> ReplyKeyboardMarkup:
+    m = ReplyKeyboardMarkup(resize_keyboard=True)
+    m.row(KeyboardButton("📊 İstatistikler"), KeyboardButton("📦 Bekleyen Siparişler"))
+    m.row(KeyboardButton("➕ Kategori Ekle"), KeyboardButton("➕ Ürün Ekle"))
+    m.row(KeyboardButton("🎟️ Kupon Oluştur"), KeyboardButton("🎁 Çekiliş Başlat"))
+    m.row(KeyboardButton("📢 Kanal Yönet"), KeyboardButton("🆘 Destek Talepleri"))
+    m.row(KeyboardButton("👥 Admin Yönet"), KeyboardButton("⏳ Onay Bekleyenler"))
+    m.row(KeyboardButton("🚫 Kullanıcı Engelle"), KeyboardButton("✅ Engel Kaldır"))
+    m.row(KeyboardButton("🏠 Ana Menü"))
+    return m
+
+
+def pending_action_inline(action_id: int, action_desc: str) -> InlineKeyboardMarkup:
+    m = InlineKeyboardMarkup()
+    m.row(
+        InlineKeyboardButton("✅ Onayla", callback_data=f"approve_action_{action_id}"),
+        InlineKeyboardButton("❌ Reddet", callback_data=f"reject_action_{action_id}")
+    )
+    return m
+
+
+def channel_list_inline(channels: list) -> InlineKeyboardMarkup:
+    m = InlineKeyboardMarkup()
+    for ch in channels:
+        m.add(InlineKeyboardButton(f"🗑 {ch} Sil", callback_data=f"del_channel_{ch.lstrip('@')}"))
+    m.add(InlineKeyboardButton("➕ Yeni Kanal Ekle", callback_data="add_new_channel"))
     return m
